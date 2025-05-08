@@ -11,4 +11,6 @@
 * Discard clusters that are more than 1-2 kpc away, cause TESS won't see them ??
 ------------------------------------------------------------------------------------------------------------
 * Find the radial velocities and metallicities ????
+    - Maybe look at their spectra ??
 * Compare Blue Straggler candidates to known stragglers ??
+* Find more candidates ?

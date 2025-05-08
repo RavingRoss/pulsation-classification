@@ -1,8 +1,8 @@
-from requests.exceptions import ChunkedEncodingError, ReadTimeout
-from astropy.coordinates import SkyCoord
-from astroquery.vizier import Vizier
-from astropy import units as u
-import pandas as pd
+from requests.exceptions import ChunkedEncodingError, ReadTimeout 
+from astropy.coordinates import SkyCoord 
+from astroquery.vizier import Vizier 
+from astropy import units as u 
+import pandas as pd 
 import time
 import os
 

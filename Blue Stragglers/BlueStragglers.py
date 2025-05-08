@@ -63,15 +63,12 @@ class GetData:
             bp_rp = clusters['BP-RP0'].values
             
             # Getting the data from the roAp file
-            gmag_r = roAp['GMAG0'].values
-            bp_rp_r = roAp['BP-RP0'].values
-            
-            '''gmag = clusters['Gmag'].values
-            bp_rp = clusters['BPmag'].values - clusters['RPmag'].values'''
+            '''gmag_r = roAp['GMAG0'].values
+            bp_rp_r = roAp['BP-RP0'].values'''
             
             fig, ax = plt.subplots()
             ax.scatter(bp_rp, gmag, s=5, c='m', label='Cluster', zorder=2)
-            ax.scatter(bp_rp_r, gmag_r, s=5, c='r', label='roAp', zorder=2)
+            #ax.scatter(bp_rp_r, gmag_r, s=5, c='r', label='roAp', zorder=2)
             ax.invert_yaxis()
             plt.title(f"Color Magnitude Diagram of ID {target}", fontweight='bold')
             ax.set_xlabel("BP-RP (Temperature)")
@@ -79,8 +76,8 @@ class GetData:
             ax.grid(True, zorder=0)
             
             # Define the region of interest (ROI)
-            xmin, xmax = min(bp_rp), 0.2 # x-axis range
-            ymin, ymax = min(gmag), 2   # y-axis range
+            xmin, xmax = min(bp_rp), 0.5 # x-axis range
+            ymin, ymax = min(gmag), 13   # y-axis range
             
             # Add a rectangle to highlight the region
             rect = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
@@ -103,8 +100,6 @@ class GetData:
                 else:
                     # Save the DataFrame back to the CSV file / Change based on what the input file is
                     newpath = f'Data/Candidates/stragler-candidates-ID{target}.csv'
-                    # newpath = f'Data/1000 at 1 deg Candidates/stragler-candidates-ID{target}.csv'
-                    # newpath = f'Data/300 at 0_5 deg Candidates/stragler-candidates-ID{target}.csv'
                     df.to_csv(newpath, index=False)
                     print(f'Selected data saved to {newpath} of length {len(df)} vs original length {len(c)}')
             else:
@@ -258,6 +253,8 @@ class TimeDataTESS :
                     'Probability': prob,
                     'RA': ra,
                     'DEC': dec,
+                    'pmRA' : row.pmRA,
+                    'pmDEC' : row.pmDE,
                     'Nyquist Frequency': round(nyquist, 6),
                     'Max Power': round(maxPw, 6),
                     'Frequency at max Power': round(maxPwFreq, 4),
@@ -279,10 +276,12 @@ class TimeDataTESS :
         tess_results = self.getTESSData(targetID)
         
         # Data from the roAp dataset
-        file1 = 'Data/field_roAp_gaiaNstarhorse.csv'
-        roAp = pd.read_csv(file1)
-        gmag0 = roAp['GMAG0']
-        bp_rp0 = roAp['BP-RP0']
+        file1 = 'Data/members.parquet'
+        clust = pd.read_parquet(file1)
+        clust = clust[clust['ID'] == targetID]
+        gmag0 = clust['GMAG0']
+        bp_rp0 = clust['BP-RP0']
+        prob0 = clust['Prob']
         # Data from the cluster candidates
         file2 = f'Data/Candidates/stragler-candidates-ID{targetID}.csv'
         cands = pd.read_csv(file2)
@@ -299,6 +298,7 @@ class TimeDataTESS :
             gmag = stars['GMAG'][i]
             bp_rp = stars['BP_RP'][i]
             name = stars['Cluster Name'][i]
+            prob = stars['Probability'][i]
             
             print(f'Plotting {id}...')
             
@@ -306,9 +306,9 @@ class TimeDataTESS :
             fig, axs = plt.subplots(2, 2, figsize=(10, 12))
             
             # Plotting the CMD
-            axs[0,0].scatter(bp_rp, gmag, c='black', label=f'{id}', s=40, zorder=3, marker='*')
-            axs[0,0].scatter(bp_rp0, gmag0, c='m', label='roAps', s=10, zorder=1)
-            axs[0,0].scatter(bp_rp1, gmag1, c='c', label=f'{name}', s=10, zorder=1)
+            sc = axs[0,0].scatter(bp_rp0, gmag0, c=prob0, cmap='viridis', label=f'{name}', s=10, zorder=1)
+            axs[0,0].scatter(bp_rp, gmag, c=prob, cmap='viridis', label=f'{id}', s=40, zorder=3, marker='*')
+            fig.colorbar(sc, ax=axs[0, 0], label='Probability')
             axs[0,0].set_title(f'CMD of TESS star with Cluster and roAp Stars', fontweight='bold')
             axs[0,0].set_ylabel('Absolute Mag [GMAG]', fontweight='bold')
             axs[0,0].set_xlabel('Color/Temp [Bp-Rp]', fontweight='bold')
@@ -365,8 +365,10 @@ class Main:
     """
     def __init__(self):
         self.roAp = 'Data/field_roAp_gaiaNstarhorse.csv'
-        self.pfile = 'Data/cross-referenced-results.parquet'
-        self.cfile = 'Data/cross-referenced-results.csv'
+        '''self.pfile = 'Data/cross-referenced-results.parquet'
+        self.cfile = 'Data/cross-referenced-results.csv' '''
+        self.cfile = 'Data/members.csv'
+        self.pfile = 'Data/members.parquet'
         self.file_pattern = "Data/TESS Data/Clusters/TESS Cluster *.csv"
         
         if os.path.exists(self.pfile):
@@ -375,6 +377,11 @@ class Main:
         else:
             print("Creating parquet file for faster iterating")
             par = pd.read_csv(self.cfile)
+            
+            par.rename(columns={'Gmag': 'GMAG0'}, inplace=True)
+            bp_rp = par['BPmag'] - par['RPmag']
+            par.insert(loc=11, column="BP-RP0", value=bp_rp)
+            print(par.columns)
             par.to_parquet(self.pfile, index=False)
             self.pfile = self.pfile
     
@@ -446,5 +453,6 @@ if __name__ == "__main__":
     clusters = pd.read_csv('Data/clusters.csv') 
     stop_clust = len(clusters) # will take a while, like 2 days, unless you change input value for Vizier query  
     
-    Main().run(start=1, stop=5) # Change the stop variable to the target ID you want to start from, default is 1 and 7167, resp.
+    # TEST USING MEMBERS.CSV AND SEE WHAT YOU GET
+    Main().run(start=0, stop=stop_clust) # Change the stop variable to the target ID you want to start from, default is 1 and 7167, resp.
     print('Done! Hope you got data lol!')
