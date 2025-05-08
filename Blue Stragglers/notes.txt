@@ -1,0 +1,14 @@
+* Make subplots including CMD highlighting current star and lightcurve with power spectrum !!
+* Do a cross reference with gaia designation and TIC !!
+* Make the power spectrum zoom in to what were interested in !!
+* Use one sector with fastest cadence !!
+* Find more clusters !!?
+* Flatten lightcurve before doing periodogram !!
+------------------------------------------------------------------------------------------------------------
+* Don't use the roAp stars, simply plot the CMD and select the region you want to search for Blue Straglers !!
+* Use probability when plotting from clusters dataseta and pick clusters with most stars in them
+    - I am just filtering them out if the probability is < 0.5 !!
+* Discard clusters that are more than 1-2 kpc away, cause TESS won't see them ??
+------------------------------------------------------------------------------------------------------------
+* Find the radial velocities and metallicities ????
+* Compare Blue Straggler candidates to known stragglers ??
