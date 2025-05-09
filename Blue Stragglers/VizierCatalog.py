@@ -12,22 +12,22 @@ class GetData:
     to cross-reference stars from the StarHorse catalog.
     """
     # Vizier catalog query
-    def vizierQuery(self, cat='J/A+A/686/A42', input=-1): # -1 is default for all rows
+    def vizierQuery(self, cat='J/A+A/686/A42', input=-1, # -1 is default for all rows
+    col=['Name', 'ID', 'GaiaDR3', 'Prob', 'RA_ICRS', 'DE_ICRS','pmRA', 'pmDE', 'Gmag', 'BPmag', 'RPmag', 'dist50', 'logAge50', 'Mass50']): 
         """
         Quering the Vizier catalog for clusters and members data
         specified catalog (J/A+A/686/A42).
         """
-        V = Vizier()
-        
+        V = Vizier(columns=col)
         catalog = V.find_catalogs(cat)
         V.ROW_LIMIT = input # or a large number
         catalogs = V.get_catalogs(catalog.keys())
         clusters = catalogs[0]
         clusters = clusters.to_pandas()
-        clusters.to_csv('Data/clusters.csv', index=False)
+        clusters.to_csv('Data/Newclusters.csv', index=False)
         members = catalogs[1]
         members = members.to_pandas()
-        members.to_csv('Data/members.csv', index=False)
+        members.to_csv('Data/Newmembers.csv', index=False)
         print(f'{len(members)} Clusters')
         print(f'{len(members)} Members of clusters')
         return clusters, members

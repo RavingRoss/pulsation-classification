@@ -25,17 +25,25 @@ Blue Straggler Classification Alg|
 
 # This is the VizierCatalog.py file that contains the functions to get the data from the clusters and members files
 import VizierCatalog as VC
+# This is the read_mist_models.py file from MIST which gives theoretical isochrones
+import read_mist_models as rmm
 
 # Importing packages as needed
-from astroquery.mast import Catalogs 
-import matplotlib.patches as patches 
+from astroquery.mast import Catalogs
+import matplotlib.patches as patches
+from scipy.stats import gaussian_kde
+from astroquery.vizier import Vizier 
+from scipy.signal import find_peaks
 import astropy.coordinates as coord 
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 from astropy.table import Table 
+from scipy.stats import skew
 import astropy.units as u 
 import lightkurve as lk
 import pandas as pd
 import numpy as np
+import traceback
+import time
 import glob
 import os
 
@@ -54,13 +62,14 @@ class GetData:
         try:
             clusters = pd.read_parquet(clustersFile)
             #clusters = pd.read_csv(clustersFile)
-            roAp = pd.read_csv(roApFile)
+            #roAp = pd.read_csv(roApFile)
             clusters = clusters[clusters['ID'] == target]
             c = pd.DataFrame(clusters)
             #members = pd.read_csv(membersFile)
             # Getting the data from the clusters file
             gmag = clusters['GMAG0'].values
             bp_rp = clusters['BP-RP0'].values
+            name = clusters['Name'].iloc[0]
             
             # Getting the data from the roAp file
             '''gmag_r = roAp['GMAG0'].values
@@ -70,14 +79,14 @@ class GetData:
             ax.scatter(bp_rp, gmag, s=5, c='m', label='Cluster', zorder=2)
             #ax.scatter(bp_rp_r, gmag_r, s=5, c='r', label='roAp', zorder=2)
             ax.invert_yaxis()
-            plt.title(f"Color Magnitude Diagram of ID {target}", fontweight='bold')
+            plt.title(f"Color Magnitude Diagram of {name}", fontweight='bold')
             ax.set_xlabel("BP-RP (Temperature)")
             ax.set_ylabel("GMAG (Absolute Magnitude)")
             ax.grid(True, zorder=0)
             
-            # Define the region of interest (ROI)
-            xmin, xmax = min(bp_rp), 0.5 # x-axis range
-            ymin, ymax = min(gmag), 13   # y-axis range
+            # Define the region of interest (other values commented, uncomment if using de-reddened data from starhorse)
+            xmin, xmax = min(bp_rp), 0.5 # 0.2 # x-axis range
+            ymin, ymax = min(gmag), 13 # 2  # y-axis range
             
             # Add a rectangle to highlight the region
             rect = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
@@ -105,7 +114,41 @@ class GetData:
             else:
                 print('No region selected.')
         except Exception as e:
-            print(f"An error occurred for target ID {target}: {e}")
+            print(f"\nException for target ID {target}: {type(e).__name__} — {e}")
+            traceback.print_exc()
+            
+    # Vizier catalog query
+    def vizierQuery(self, cat='J/A+A/686/A42', input=-1, # -1 is default for all rows
+    col=['Name', 'ID', 'GaiaDR3', 'Prob', 'RA_ICRS', 'DE_ICRS','pmRA', 'pmDE', 'Gmag', 'BP-RP', 'dist50', 'logAge50', 'Mass50']): 
+        """
+        Quering the Vizier catalog for clusters and members data
+        specified catalog (J/A+A/686/A42), specifying the columns with 'cols'.
+        """
+        start_time = time.time()
+        try:
+            V = Vizier(columns=col)
+            catalog = V.find_catalogs(cat)
+            V.ROW_LIMIT = input # or a large number
+            print("Getting catalogs...")
+            catalogs = V.get_catalogs(catalog.keys())
+            print("Finished, converting and saving as csv files...")
+            clusters = catalogs[0]
+            clusters = clusters.to_pandas()
+            clusters.to_csv('Data/clusters.csv', index=False)
+            members = catalogs[1]
+            members = members.to_pandas()
+            members.to_csv('Data/members.csv', index=False)
+            print(f'{len(clusters)} Clusters')
+            print(clusters.columns)
+            print(f'{len(members)} Members of clusters')
+            print(members.columns)
+        except Exception as e:
+            print(f"Query failed: {e}")
+            
+        end = time.time()
+        elapsed = (end - start_time) / 60
+        print(f"Query completed in {elapsed:.2f} minutes, moving on...")
+        #return clusters, members
 
 class TimeDataTESS :
     """
@@ -144,13 +187,13 @@ class TimeDataTESS :
 
         if len(ticResult) == 0:
             print(f"No TIC match found near RA={ra}, DEC={dec}")
-            return None, None
+            return None, None, None, None
 
         search = lk.search_lightcurve(f"TIC {tic_id}", author='SPOC', cadence='short')#author='SPOC', mission='TESS', exptime=120)
         
         if len(search) == 0:
             print(f"No light curves found for TIC {tic_id}, (RA={ra}, DEC={dec})") # Debugging
-            return None, None
+            return None, None, None, None
 
         print('Printing original:\n', search)
         
@@ -175,7 +218,7 @@ class TimeDataTESS :
 
         if not valid_entries:
             print(f"No valid light curves found with cadence {shortest_cadence} s")
-            return None, None
+            return None, None, None, None
 
         # Step 3: Download and stitch all valid entries
         try:
@@ -185,11 +228,24 @@ class TimeDataTESS :
             stitched = stitched.normalize(unit='ppm')
             print('Stitched and Normalized light curve...')
             
-            return stitched, tic_id
+            pg = lc.flatten().to_periodogram(normalization='amplitude')
+            print(f"Converted to periodogram...")
+            pg.show_properties()
+            
+            peaks, _ = find_peaks(pg.power, height=1e-4)
+            
+            if peaks.shape == (0,): # Filtering out the stars with no features
+                print("No features to analyze...")
+                return None, None, None, None
+            
+            skewed = skew(pg.power, nan_policy='omit')
+            print('Skew value:', skewed)
+            
+            return stitched, pg, tic_id, skewed
 
         except Exception as e:
             print(f"Download failed for TIC {tic_id}: {e}")
-            return None, None
+            return None, None, None, None
         '''else:
             print(f"TIC {tic_id} not found in known data.")
             return None, None'''
@@ -219,7 +275,7 @@ class TimeDataTESS :
                 print(f"Skipping candidate with low probability: {prob}")
                 continue
             
-            lc, tic_id = self.getShortestCadence(ra, dec)
+            lc, pg, tic_id, skewed = self.getShortestCadence(ra, dec)
             
             if lc is None:
                 continue
@@ -229,9 +285,7 @@ class TimeDataTESS :
             tbl.write(f'Data/TESS Data/Light Curves/Light Curve TIC {tic_id}.csv', 
                       format='ascii.csv', overwrite=True)
 
-            pg = lc.flatten().to_periodogram(normalization='amplitude')
             print(f"Downloaded data for TIC {tic_id}")
-            pg.show_properties()
 
             id = pg.targetid
             nyquist = pg.nyquist.value
@@ -259,40 +313,35 @@ class TimeDataTESS :
                     'Max Power': round(maxPw, 6),
                     'Frequency at max Power': round(maxPwFreq, 4),
                     'GMAG': row.GMAG0,
-                    'BP_RP': row.BP_RP0
+                    'BP_RP': row.BP_RP0,
+                    'Skew' : skewed
                 })
                     
             # Returning the stars data as a pandas dataframe
             stars = pd.DataFrame(stars)
             print(stars)
             stars.to_csv(f"Data/TESS Data/Clusters/TESS Cluster {stars['Cluster Name'][0]}.csv")
-            return stars
+            return stars, lc, pg
         
     def plotTESSData(self, targetID):
         """
         Plotting, literally everything, from the original CMD, now including
         the TESS object explicitely, to the power spectrum of the the TESS object.
         """
-        tess_results = self.getTESSData(targetID)
+        tess_results, lc, pg = self.getTESSData(targetID)
         
-        # Data from the roAp dataset
+        # Data from the cluster members dataset
         file1 = 'Data/members.parquet'
         clust = pd.read_parquet(file1)
         clust = clust[clust['ID'] == targetID]
         gmag0 = clust['GMAG0']
         bp_rp0 = clust['BP-RP0']
         prob0 = clust['Prob']
-        # Data from the cluster candidates
-        file2 = f'Data/Candidates/stragler-candidates-ID{targetID}.csv'
-        cands = pd.read_csv(file2)
-        gmag1 = cands['GMAG0']
-        bp_rp1 = cands['BP-RP0']
         # Data from the TESS stars
         stars = tess_results
             
         for i in range(len(stars)):
             # Getting the data from the TESS stars file
-            maxPwFreq = stars['Frequency at max Power'][i]
             nyquist = stars['Nyquist Frequency'][i]
             id = stars['TargetID'][i]
             gmag = stars['GMAG'][i]
@@ -303,54 +352,46 @@ class TimeDataTESS :
             print(f'Plotting {id}...')
             
             # Making the subplots and setting the figsize
-            fig, axs = plt.subplots(2, 2, figsize=(10, 12))
+            fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(10, 12))
+            ax1, ax2, ax3, ax4 = axs.flatten()
             
             # Plotting the CMD
-            sc = axs[0,0].scatter(bp_rp0, gmag0, c=prob0, cmap='viridis', label=f'{name}', s=10, zorder=1)
-            axs[0,0].scatter(bp_rp, gmag, c=prob, cmap='viridis', label=f'{id}', s=40, zorder=3, marker='*')
-            fig.colorbar(sc, ax=axs[0, 0], label='Probability')
-            axs[0,0].set_title(f'CMD of TESS star with Cluster and roAp Stars', fontweight='bold')
-            axs[0,0].set_ylabel('Absolute Mag [GMAG]', fontweight='bold')
-            axs[0,0].set_xlabel('Color/Temp [Bp-Rp]', fontweight='bold')
-            axs[0,0].grid(zorder=0)
-            axs[0,0].legend(loc='best')
-            axs[0,0].invert_yaxis()
-            
-            # Read the data from the light curve graphing profile
-            file4 = f'Data/TESS Data/Light Curves/Light Curve {id}.csv'
-            plot0 = Table.read(file4, format='ascii.csv')
-            # Getting flux and time from the graphing profile
-            flux = plot0['Flux']
-            time = plot0['Time (BKJD)']
+            sc = ax1.scatter(bp_rp0, gmag0, c=prob0, cmap='viridis', label=f'{name}', s=10, zorder=1)
+            ax1.scatter(bp_rp, gmag, c=prob, cmap='viridis', label=f'{id}', s=80, zorder=3, marker='*')
+            fig.colorbar(sc, ax=ax1, label='Probability')
+            ax1.set_title(f'CMD of TESS star with Cluster', fontweight='bold')
+            ax1.set_ylabel('Absolute Mag [GMAG]', fontweight='bold')
+            ax1.set_xlabel('Color/Temp [Bp-Rp]', fontweight='bold')
+            ax1.grid(zorder=0)
+            ax1.legend(loc='best')
+            ax1.invert_yaxis()
             
             # Plotting the light curve
-            axs[1,0].plot(time, flux, c='k', zorder=3)
-            axs[1,0].set_title(f'Light Curve of {id}', fontweight='bold')
-            axs[1,0].set_ylabel('Flux [e/s]', fontweight='bold')
-            axs[1,0].set_xlabel('Time [BKJD]', fontweight='bold')
-            axs[1,0].grid(zorder=0)
-            
-            # Read the data from the power spectrum graphing profile
-            file5 = f'Data/TESS Data/Power Spectrums/Power Spectrum {id}.csv'
-            plot1 = Table.read(file5, format='ascii.csv')
-            # Getting frequency and power from the graphing profile
-            freq = plot1['Frequency']
-            power = plot1['Power']
+            time = lc.time.value
+            xmin, xmax = min(time), (min(time)+10)
+            lc.plot(ax=ax3, label='')
+            ax3.set_xlim(xmin, xmax)
+            ax3.set_title(f'Limited Light Curve of {id}', fontweight='bold')
+            ax3.set_ylabel('Flux [e/s]', fontweight='bold')
+            ax3.set_xlabel('Time [BKJD]', fontweight='bold')
+            ax3.grid(zorder=0)
             
             # Plotting the power spectrum
-            axs[1,1].plot(freq, power, c='k', zorder=3)
-            axs[1,1].set_title(f'Power Spectrum of {id}', fontweight='bold')
-            axs[1,1].set_xlabel('Frequency [1/d]', fontweight='bold')
-            axs[1,1].grid(zorder=0)
+            pg.plot(ax=ax4, label='')
+            ax4.set_title(f'Power Spectrum of {id}', fontweight='bold')
+            ax4.set_xlabel('Frequency [1/d]', fontweight='bold')
+            ax4.set_ylabel('')
+            ax4.grid(zorder=0)
             
             # Plotting the power spectrum with limited x-axis to zoom in on features
-            axs[0,1].plot(freq, power, c='k', zorder=3, label=f'nyquist={nyquist} 1/d')
-            axs[0,1].set_title(f'Limited Power Spectrum of {id}', fontweight='bold')
-            axs[0,1].set_ylabel('Power [ppm]', fontweight='bold')
-            axs[0,1].grid(zorder=0)
-            axs[0,1].set_xlim(0, maxPwFreq + 50) # For limited graph
-            #axs[0,1].set_xlim(0, 5) # For limited graph
-            axs[0,1].legend(loc='best')
+            max_lim = pg.frequency_at_max_power+(40*(1/u.day))
+            pg.plot(ax=ax2, label=f'Nyquist: {nyquist}')
+            ax2.set_title(f'Limited Power Spectrum of {id}', fontweight='bold')
+            ax2.set_ylabel('Power [ppm]', fontweight='bold')
+            ax2.set_xlabel('')
+            ax2.grid(zorder=0)
+            ax2.set_xlim(0, max_lim.to_value())
+            ax2.legend(loc='best')
             
             plt.tight_layout()
             # Save the figure with a specific filename
@@ -377,14 +418,53 @@ class Main:
         else:
             print("Creating parquet file for faster iterating")
             par = pd.read_csv(self.cfile)
-            
             par.rename(columns={'Gmag': 'GMAG0'}, inplace=True)
-            bp_rp = par['BPmag'] - par['RPmag']
-            par.insert(loc=11, column="BP-RP0", value=bp_rp)
-            print(par.columns)
+            par.rename(columns={'BP-RP': 'BP-RP0'}, inplace=True)
             par.to_parquet(self.pfile, index=False)
             self.pfile = self.pfile
     
+    # 'start' is where you left off and 'stop' variable is how many clusters there are in the file if queried all rows
+    def run(self, start=1, stop=7167):
+        try:
+            for l in range(start-1, stop):
+                start += 1
+                targetID = start - 1
+                # Running the GetData class to get the data from the cross-referenced results
+                try:
+                    print(f"\nProcessing target ID {targetID}...")
+                    GetData().plotData(self.roAp, self.pfile, targetID)
+                    TimeDataTESS().plotTESSData(targetID)
+                
+                except Exception as e:
+                    print(f"\nException for target ID {targetID}: {type(e).__name__} — {e}")
+                    traceback.print_exc()
+                    continue  # Skip to the next iteration
+        finally:
+            print(f"Finished processing up to ID {targetID} out of {stop}.")
+            # Concatenate the data from all the clusters' TESS results and graph the skew density plot
+            self.plot_skew()
+    
+    def plot_skew(self, path='Data/TESS Data/Skewed Density Plot'):
+        """
+        Plotting the skewed values for each candidate to generate
+        a desnity plot in determining the best candidates.
+        """
+        results = self.concatenate_results()
+        skewed = results['Skew']
+        # Calculate the 2D density
+        xy = np.vstack([skewed, skewed])  # x and y are the same
+        z = gaussian_kde(xy)(xy)
+        
+        fig, ax = plt.subplots(figsize=(10,6))
+        sc = ax.scatter(skewed, skewed, c=z, s=20, cmap='viridis', label='Skew', zorder=2)
+    
+        plt.colorbar(sc, ax=ax, label='Density')
+        plt.grid(zorder=0)
+        plt.title("Density Plot to Determine 'Best' Candidates")
+        plt.legend(loc='best')
+        plt.savefig(path, dpi=300, bbox_inches='tight')
+        plt.show()
+        
     def concatenate_results(self, output_file='Data/TESS Data/All_Candidates.csv'):
         """
         Concatenate all TESS Cluster result files into a single file.
@@ -420,39 +500,28 @@ class Main:
         combined_df.to_csv(output_file, index=False)
         print(f"All candidates saved to {output_file}.")
         return combined_df
-    
-    # 'start' is where you left off and 'stop' variable is how many clusters there are in the file if queried all rows
-    def run(self, start=1, stop=7167):
-        for l in range(start-1, stop):
-            start += 1
-            targetID = start - 1
-            # Running the GetData class to get the data from the cross-referenced results
-            try:
-                print(f"\nProcessing target ID {targetID}...")
-                GetData().plotData(self.roAp, self.pfile, targetID)
-                TimeDataTESS().plotTESSData(targetID)
-            except Exception as e:
-                print(f"An error occurred for target ID {targetID}: {e}")
-                continue  # Skip to the next iteration
-        print(f"Finished processing all targets up to ID {targetID}.")
+                
         
-        # Concatenate the data from all the clusters' TESS results
-        results = self.concatenate_results()
-        print(results.head(len(results)))
-
 if __name__ == "__main__":
     # Only run if you want to cross-reference your cluster with starhorse, if not, import your own cluster file
     # from self.pfile or  self.cfile, parquet or csv resp, in the Main class __init__ function
     # If doing so, may need to change RA and DEC, GMAG and BP-RP, and other parameter column names in
     # TimeDataTESS class functions.
+    start_time = time.time()
     '''print('Running the Vizier_Catalog.py file...')
     VC.GetData.main(input=-1) # -1 for all rows during the Vizier query, if testing set to lower number
     print('Finished cross-referencing, finding candidates and getting TESS data to analyze them...')
     '''
-    # Either set stop=some number, or stop=stop_clust to run through all of the clusters
-    clusters = pd.read_csv('Data/clusters.csv') 
-    stop_clust = len(clusters) # will take a while, like 2 days, unless you change input value for Vizier query  
+    # Change the rows var to the number of rows you want your input files to be, if testing set to lower number.
+    #GetData().vizierQuery(input=-1)
     
-    # TEST USING MEMBERS.CSV AND SEE WHAT YOU GET
-    Main().run(start=0, stop=stop_clust) # Change the stop variable to the target ID you want to start from, default is 1 and 7167, resp.
-    print('Done! Hope you got data lol!')
+    # Either set stop=some number, or stop=stop_clust to run through all of the clusters (found from vizierQuery function)
+    clusters = pd.read_csv('Data/clusters.csv') 
+    stop_clust = len(clusters) # will take a while, like 2 days, unless you change input value for Vizier query.
+    print(min(clusters['logAge50']), max(clusters['logAge50']), np.mean(clusters['logAge50']))
+    #-------> CURRENTLY USING MEMBERS.CSV <-------
+    # Stop variable to the target ID you want to start from, default is 1 and 7167, resp.
+    '''Main().run(start=45, stop=stop_clust) # Stopped at ID 45
+    end = time.time()
+    elapsed = (end - start_time) / 3600
+    print(f'Done in {elapsed:.2f} hours! Hope you got data lol!')'''
