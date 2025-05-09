@@ -17,25 +17,25 @@ This project identifies and filters potential BSS candidates from stellar cluste
 
 ## File Structure
 
-- Blue Stragglers
+- Blue Stragglers/
   - .py files to run
   - Notes
   - Constraints for pip
-  - Data
-    - Candidates
+  - Data/
+    - Candidates/
       - CMD of cluster w/ selected region
       - .csv's of candidates
-    - TESS Data
-      - Clusters
+    - TESS Data/
+      - Clusters/
         - .csv's of candidates in their respective clusters
-      - Graphs
+      - Graphs/
         - Final plots of candidates 
-      - Light Curves
+      - Light Curves/
         - .csv's of flux and BKJD (time)
-      - Power Spectrums
+      - Power Spectrums/
         - .csv's of amplitude and frequencies
     - Input catalogs (.csv and .parquet)
-  - Presentation
+  - Presentation/
     - Slides
     - Paper
     - Some figures
