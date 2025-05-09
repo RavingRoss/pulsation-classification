@@ -1,6 +1,14 @@
 # Pulsation Classification
 Includes my findings and past/current research on pulsators which include roAps, Blue Stragglers, delta scuti, gamma dors, and maybe more in the future!
 
+---
+
+# Acknowledgments 
+
+I would like to acknowledge the team who developed the lightkurve package, as this project would not be where it is without them! I am excited to see what the future holds for that team of devs and for the future of Asteroseismology!
+
+---
+
 # 1. Blue Straggler Candidates
 
 This project identifies and filters potential BSS candidates from stellar cluster data using color-magnitude diagrams (CMDs) and their Power Spectrums (PS). It uses membership probabilities and photometric criteria to select candidates, visualize them, using the lightkurve package, and save the results. 
