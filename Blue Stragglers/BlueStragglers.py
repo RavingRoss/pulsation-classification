@@ -57,19 +57,30 @@ class GetData:
     cross matching with starhorse, and returning the data as a 
     pandas dataframe to plot the CMD.
     """
-    def plotData(self, roApFile, clustersFile, target):
+    def plotData(self, roApFile, membersFile, clustersFile, target):
         
         try:
-            clusters = pd.read_parquet(clustersFile)
+            cluster_mem = pd.read_parquet(membersFile)
+            cluster = pd.read_parquet(clustersFile)
             #clusters = pd.read_csv(clustersFile)
             #roAp = pd.read_csv(roApFile)
-            clusters = clusters[clusters['ID'] == target]
-            c = pd.DataFrame(clusters)
+            cluster_mem = cluster_mem[cluster_mem['ID'] == target]
+            cluster = cluster[cluster['ID'] == target]
+            c = pd.DataFrame(cluster_mem)
             #members = pd.read_csv(membersFile)
             # Getting the data from the clusters file
-            gmag = clusters['GMAG0'].values
-            bp_rp = clusters['BP-RP0'].values
-            name = clusters['Name'].iloc[0]
+            gmag = cluster_mem['GMAG0'].values
+            bp_rp = cluster_mem['BP-RP0'].values
+            
+            name = cluster['Name'].iloc[0]
+            age = float(cluster['logAge50'].values)
+            print('Cluster age:', age)
+            
+            isocmd = rmm.ISOCMD('Data/MIST_iso_reddened.iso.cmd') # Importing ISOCMD image for isochrones
+            age_ind = isocmd.age_index(age) #returns the index for the desired age
+            G = isocmd.isocmds[age_ind]['Gaia_G_DR2Rev']
+            BP = isocmd.isocmds[age_ind]['Gaia_BP_DR2Rev']
+            RP = isocmd.isocmds[age_ind]['Gaia_RP_DR2Rev']
             
             # Getting the data from the roAp file
             '''gmag_r = roAp['GMAG0'].values
@@ -77,6 +88,7 @@ class GetData:
             
             fig, ax = plt.subplots()
             ax.scatter(bp_rp, gmag, s=5, c='m', label='Cluster', zorder=2)
+            ax.plot(BP-RP, G+10, label=f'Isochrone Age: {age:.3f}', c='k', zorder=1) 
             #ax.scatter(bp_rp_r, gmag_r, s=5, c='r', label='roAp', zorder=2)
             ax.invert_yaxis()
             plt.title(f"Color Magnitude Diagram of {name}", fontweight='bold')
@@ -92,6 +104,9 @@ class GetData:
             rect = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
                                       linewidth=2, edgecolor='blue', facecolor='blue', alpha=0.3, zorder=3)
             ax.add_patch(rect)
+            
+            '''ax.set_xlim(xmin-1, max(bp_rp)+1)
+            ax.set_ylim(max(gmag)+1, ymin+1)'''
             
             plt.legend(loc='best')
             # Uncomment 'show' if you want to see the plot before selecting the region
@@ -332,11 +347,15 @@ class TimeDataTESS :
         
         # Data from the cluster members dataset
         file1 = 'Data/members.parquet'
-        clust = pd.read_parquet(file1)
+        clust_mem = pd.read_parquet(file1)
+        file10 = 'Data/clusters.parquet'
+        clust = pd.read_parquet(file10)
+        clust_mem = clust_mem[clust_mem['ID'] == targetID]
         clust = clust[clust['ID'] == targetID]
-        gmag0 = clust['GMAG0']
-        bp_rp0 = clust['BP-RP0']
-        prob0 = clust['Prob']
+        gmag0 = clust_mem['GMAG0']
+        bp_rp0 = clust_mem['BP-RP0']
+        prob0 = clust_mem['Prob']
+        age = float(clust['logAge50'].values)
         # Data from the TESS stars
         stars = tess_results
             
@@ -348,6 +367,7 @@ class TimeDataTESS :
             bp_rp = stars['BP_RP'][i]
             name = stars['Cluster Name'][i]
             prob = stars['Probability'][i]
+            skewed = stars['Skew'][i]
             
             print(f'Plotting {id}...')
             
@@ -355,16 +375,27 @@ class TimeDataTESS :
             fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(10, 12))
             ax1, ax2, ax3, ax4 = axs.flatten()
             
+            isocmd = rmm.ISOCMD('Data/MIST_iso_reddened.iso.cmd') # Importing ISOCMD image for isochrones
+            age_ind = isocmd.age_index(age) #returns the index for the desired age
+            G = isocmd.isocmds[age_ind]['Gaia_G_DR2Rev']
+            BP = isocmd.isocmds[age_ind]['Gaia_BP_DR2Rev']
+            RP = isocmd.isocmds[age_ind]['Gaia_RP_DR2Rev']
+            
             # Plotting the CMD
             sc = ax1.scatter(bp_rp0, gmag0, c=prob0, cmap='viridis', label=f'{name}', s=10, zorder=1)
             ax1.scatter(bp_rp, gmag, c=prob, cmap='viridis', label=f'{id}', s=80, zorder=3, marker='*')
+            ax1.plot(BP-RP, G+10, label=f'Isochrone Age: {age:.3f}', c='m', zorder=1) 
+            ax1.plot([], [], ':', label=f'Skew: {skewed:.3f}')
+            #ax1.plot([], [], '.', label=f'log10(age): {age:.2f}')
             fig.colorbar(sc, ax=ax1, label='Probability')
             ax1.set_title(f'CMD of TESS star with Cluster', fontweight='bold')
             ax1.set_ylabel('Absolute Mag [GMAG]', fontweight='bold')
             ax1.set_xlabel('Color/Temp [Bp-Rp]', fontweight='bold')
+            ax1.set_xlim(min(bp_rp0)-0.5, max(bp_rp0)+0.5)
+            ax1.set_ylim(max(gmag0)+1, min(gmag0)-1)
             ax1.grid(zorder=0)
             ax1.legend(loc='best')
-            ax1.invert_yaxis()
+            #ax1.invert_yaxis()
             
             # Plotting the light curve
             time = lc.time.value
@@ -408,23 +439,31 @@ class Main:
         self.roAp = 'Data/field_roAp_gaiaNstarhorse.csv'
         '''self.pfile = 'Data/cross-referenced-results.parquet'
         self.cfile = 'Data/cross-referenced-results.csv' '''
-        self.cfile = 'Data/members.csv'
-        self.pfile = 'Data/members.parquet'
+        self.cmfile = 'Data/members.csv'
+        self.pmfile = 'Data/members.parquet'
+        self.cfile = 'Data/clusters.csv'
+        self.pfile = 'Data/clusters.parquet'
         self.file_pattern = "Data/TESS Data/Clusters/TESS Cluster *.csv"
         
-        if os.path.exists(self.pfile):
+        if os.path.exists(self.pfile) & os.path.exists(self.pmfile):
             print("Getting parquet from dir")
             self.pfile = self.pfile
+            self.pmfile = self.pmfile
         else:
-            print("Creating parquet file for faster iterating")
-            par = pd.read_csv(self.cfile)
-            par.rename(columns={'Gmag': 'GMAG0'}, inplace=True)
-            par.rename(columns={'BP-RP': 'BP-RP0'}, inplace=True)
-            par.to_parquet(self.pfile, index=False)
+            print("Creating parquet files for faster iterating")
+            par_m = pd.read_csv(self.cmfile)
+            par_m.rename(columns={'Gmag': 'GMAG0'}, inplace=True)
+            par_m.rename(columns={'BP-RP': 'BP-RP0'}, inplace=True)
+            par_m.to_parquet(self.pmfile, index=False)
+            self.pmfile = self.pmfile
+            
+            par_c = pd.read_csv(self.cfile)
+            par_c.to_parquet(self.pfile, index=False)
             self.pfile = self.pfile
     
     # 'start' is where you left off and 'stop' variable is how many clusters there are in the file if queried all rows
     def run(self, start=1, stop=7167):
+        start_time = time.time()
         try:
             for l in range(start-1, stop):
                 start += 1
@@ -432,17 +471,22 @@ class Main:
                 # Running the GetData class to get the data from the cross-referenced results
                 try:
                     print(f"\nProcessing target ID {targetID}...")
-                    GetData().plotData(self.roAp, self.pfile, targetID)
+                    GetData().plotData(self.roAp, self.pmfile, self.pfile, targetID)
                     TimeDataTESS().plotTESSData(targetID)
-                
                 except Exception as e:
-                    print(f"\nException for target ID {targetID}: {type(e).__name__} — {e}")
-                    traceback.print_exc()
+                    print(f"\nException for target ID {targetID}: {e}")
                     continue  # Skip to the next iteration
+        except KeyboardInterrupt:
+            print("\nCaught KeyboardInterrupt!")
         finally:
             print(f"Finished processing up to ID {targetID} out of {stop}.")
             # Concatenate the data from all the clusters' TESS results and graph the skew density plot
             self.plot_skew()
+            end = time.time()
+            elapsed = (end - start_time) / 3600
+            print(f'Done in {elapsed:.2f} hours! Hope you got data lol!')
+            # Reraise the KeyboardInterrupt to stop the program
+            raise KeyboardInterrupt
     
     def plot_skew(self, path='Data/TESS Data/Skewed Density Plot'):
         """
@@ -451,19 +495,23 @@ class Main:
         """
         results = self.concatenate_results()
         skewed = results['Skew']
+        power = results['Max Power']
         # Calculate the 2D density
-        xy = np.vstack([skewed, skewed])  # x and y are the same
+        xy = np.vstack([skewed, power])  # x and y are the same
         z = gaussian_kde(xy)(xy)
         
         fig, ax = plt.subplots(figsize=(10,6))
-        sc = ax.scatter(skewed, skewed, c=z, s=20, cmap='viridis', label='Skew', zorder=2)
+        sc = ax.scatter(skewed, power, c=z, s=20, cmap='viridis', label='Skew', zorder=2)
     
-        plt.colorbar(sc, ax=ax, label='Density')
+        cbar = plt.colorbar(sc, ax=ax, label='Density')
+        cbar.set_ticks([])  # Remove the tick marks and numbers
+        plt.xlabel('Skew value')
+        plt.xlabel('Max Power [ppm]')
         plt.grid(zorder=0)
         plt.title("Density Plot to Determine 'Best' Candidates")
         plt.legend(loc='best')
         plt.savefig(path, dpi=300, bbox_inches='tight')
-        plt.show()
+        #plt.show()
         
     def concatenate_results(self, output_file='Data/TESS Data/All_Candidates.csv'):
         """
@@ -518,10 +566,7 @@ if __name__ == "__main__":
     # Either set stop=some number, or stop=stop_clust to run through all of the clusters (found from vizierQuery function)
     clusters = pd.read_csv('Data/clusters.csv') 
     stop_clust = len(clusters) # will take a while, like 2 days, unless you change input value for Vizier query.
-    print(min(clusters['logAge50']), max(clusters['logAge50']), np.mean(clusters['logAge50']))
+
     #-------> CURRENTLY USING MEMBERS.CSV <-------
     # Stop variable to the target ID you want to start from, default is 1 and 7167, resp.
-    '''Main().run(start=45, stop=stop_clust) # Stopped at ID 45
-    end = time.time()
-    elapsed = (end - start_time) / 3600
-    print(f'Done in {elapsed:.2f} hours! Hope you got data lol!')'''
+    Main().run(start=1593, stop=stop_clust) # Stopped at ID 1593

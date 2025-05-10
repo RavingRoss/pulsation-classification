@@ -69,23 +69,26 @@ def peaks_test():
 
 def skew_test():
     
-    if 'Skew' in cands.columns:
+    if 'Skew LC' in cands.columns:
         print(f'Skewed values exist, loading results...')
         skewed = cands['Skew'].values
+        skewlc = cands['Skew LC'].values
+        maxpw = cands['Max Power'].values
         
         # Calculate the 2D density
-        xy = np.vstack([skewed, skewed])  # x and y are the same
+        xy = np.vstack([skewlc, maxpw])
         z = gaussian_kde(xy)(xy)
         
         fig, ax = plt.subplots(figsize=(10,6))
-        sc = ax.scatter(skewed, skewed, c=z, s=20, cmap='viridis', zorder=2)
+        sc = ax.scatter(skewlc, maxpw, c=z, s=20, cmap='viridis', zorder=2)
        
         plt.colorbar(sc, ax=ax, label='Density')
         plt.grid(zorder=0)
         plt.show()
     
     else:
-        sigmas = []
+        xsigmas = []
+        ysigmas = []
         print(f'Skewed values do not exist, creating new...')
         for i in range(0, len(cands)):
             
@@ -107,19 +110,25 @@ def skew_test():
             pg.show_properties()
             
             x = pg.power
-            sigma = skew(x, nan_policy='omit', keepdims=False)
-            print('Skew value:', sigma)
-            sigmas.append(sigma)
+            y = lc_stitched.flux.to_value()
+            print(y.shape)
+            xsigma = skew(x, nan_policy='omit', keepdims=False)
+            ysigma = skew(y, nan_policy='omit', keepdims=False)
+            print('Skew value:', xsigma)
+            xsigmas.append(xsigma)
+            print('Skew value:', ysigma)
+            xsigmas.append(ysigma)
         
-        cands['Skew'] = sigmas
+        cands['Skew'] = xsigmas
+        cands['Skew LC'] = ysigmas
         cands.to_csv(path, index=False)
         
         # Calculate the 2D density
-        xy = np.vstack([sigmas, sigmas])  # x and y are the same
+        xy = np.vstack([ysigmas, cands['Max Power']])  # x and y are the same
         z = gaussian_kde(xy)(xy)
         
         fig, ax = plt.subplots()
-        sc = ax.scatter(sigmas, sigmas, c=z, s=20, cmap='viridis', zorder=2)
+        sc = ax.scatter(ysigmas, cands['Max Power'], c=z, s=20, cmap='viridis', zorder=2)
        
         plt.colorbar(sc, ax=ax, label='Density')
         plt.grid(zorder=0)
@@ -127,7 +136,7 @@ def skew_test():
     
 def isochrone():
     
-    isocmd = rmm.ISOCMD('Data/MIST_iso_681dabdfa6316.iso.cmd')
+    isocmd = rmm.ISOCMD('Data/MIST_iso_reddened.iso.cmd')
     
     print ('version: ', isocmd.version)
     print ('photometric system: ', isocmd.photo_sys)
@@ -136,14 +145,13 @@ def isochrone():
     print ('ages: ', [round(x,2) for x in isocmd.ages])
     print ('number of ages: ', isocmd.num_ages)
     print ('available columns: ', isocmd.hdr_list)
-    print ('Av extinction: ', isocmd.Av_extinction)
     
     age_ind = isocmd.age_index(8.5) #returns the index for the desired age
-    B = isocmd.isocmds[age_ind]['Bessell_B']
-    V = isocmd.isocmds[age_ind]['Bessell_V']
-    R = isocmd.isocmds[age_ind]['Bessell_R']
+    G = isocmd.isocmds[age_ind]['Gaia_G_DR2Rev']
+    BP = isocmd.isocmds[age_ind]['Gaia_BP_DR2Rev']
+    RP = isocmd.isocmds[age_ind]['Gaia_RP_DR2Rev']
     plt.scatter(cands['BP_RP'], cands['GMAG'], label='Cands', c='r')
-    plt.plot(B-R, V, label='Isochrone') 
+    plt.plot(BP-RP, G, label='Isochrone') 
     plt.xlabel('Bessell B - Bessell R')
     plt.ylabel('Bessell V')
     plt.gca().invert_yaxis()
@@ -152,5 +160,5 @@ def isochrone():
     
 if __name__ == '__main__':
     #peaks_test()
-   # skew_test()
-   isochrone()
+    skew_test()
+   #isochrone()
