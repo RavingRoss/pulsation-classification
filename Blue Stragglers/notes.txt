@@ -16,8 +16,8 @@
 * Find the radial velocities and metallicities ????
     - Maybe look at their spectra ??
 * Compare Blue Straggler candidates to known stragglers ??
-* Find more candidates ?
+* Find more candidates !!
 
 * Use scipy.signal.find_peaks to differentiate between bad and good signals. !!
     - measure the scewdness, high skew, a lot of high amp peaks. (scipy.stats.skew) !!
-* Add age parameter ??
+* Add age parameter !!

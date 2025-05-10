@@ -17,11 +17,13 @@ to conclude if they are indeed a Blue Straggler, another type of pulsator, or ne
 
 '''
 # The 'best-candidates.csv' file was made manually by inspecting the results from BlueStragglers.py
-path = 'Data/TESS Data/Graphs/CM-best-candidates.csv'
-cands = pd.read_csv(path)
 
 def peaks_test():
-    for i in range(0, len(cands)):
+    
+    path = 'Data/TESS Data/Graphs/CM-best-candidates.csv'
+    cands = pd.read_csv(path)
+    
+    for i in range(9, 10):
         
         tic_id = cands['TargetID'][i]
         ra, dec = cands['RA'][i], cands['DEC'][i]
@@ -68,12 +70,16 @@ def peaks_test():
             plt.show()
 
 def skew_test():
+    path = 'Data/TESS Data/Graphs/CM-best-candidates.csv'
+    cands = pd.read_csv(path)
     
     if 'Skew LC' in cands.columns:
         print(f'Skewed values exist, loading results...')
-        skewed = cands['Skew'].values
+        skewed = cands['Skew PG'].values
         skewlc = cands['Skew LC'].values
         maxpw = cands['Max Power'].values
+        cand = cands.drop('Skew', axis=1)
+        cand.to_csv(path, index=False)
         
         # Calculate the 2D density
         xy = np.vstack([skewlc, maxpw])
@@ -111,16 +117,17 @@ def skew_test():
             
             x = pg.power
             y = lc_stitched.flux.to_value()
-            print(y.shape)
+            y = np.array(y)
+            print(x)
             xsigma = skew(x, nan_policy='omit', keepdims=False)
             ysigma = skew(y, nan_policy='omit', keepdims=False)
-            print('Skew value:', xsigma)
+            print('PG Skew value:', xsigma)
             xsigmas.append(xsigma)
-            print('Skew value:', ysigma)
-            xsigmas.append(ysigma)
+            print('LC Skew value:', ysigma)
+            ysigmas.append(ysigma)
         
-        cands['Skew'] = xsigmas
-        cands['Skew LC'] = ysigmas
+        cands['PG Skew'] = xsigmas
+        cands['LC Skew'] = ysigmas
         cands.to_csv(path, index=False)
         
         # Calculate the 2D density

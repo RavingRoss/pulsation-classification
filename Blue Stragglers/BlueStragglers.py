@@ -97,7 +97,7 @@ class GetData:
             ax.grid(True, zorder=0)
             
             # Define the region of interest (other values commented, uncomment if using de-reddened data from starhorse)
-            xmin, xmax = min(bp_rp), 0.5 # 0.2 # x-axis range
+            xmin, xmax = min(bp_rp), 1 # 0.2 # x-axis range
             ymin, ymax = min(gmag), 13 # 2  # y-axis range
             
             # Add a rectangle to highlight the region
@@ -202,13 +202,13 @@ class TimeDataTESS :
 
         if len(ticResult) == 0:
             print(f"No TIC match found near RA={ra}, DEC={dec}")
-            return None, None, None, None
+            return None, None, None, None, None
 
         search = lk.search_lightcurve(f"TIC {tic_id}", author='SPOC', cadence='short')#author='SPOC', mission='TESS', exptime=120)
         
         if len(search) == 0:
             print(f"No light curves found for TIC {tic_id}, (RA={ra}, DEC={dec})") # Debugging
-            return None, None, None, None
+            return None, None, None, None, None
 
         print('Printing original:\n', search)
         
@@ -233,17 +233,20 @@ class TimeDataTESS :
 
         if not valid_entries:
             print(f"No valid light curves found with cadence {shortest_cadence} s")
-            return None, None, None, None
+            return None, None, None, None, None
 
         # Step 3: Download and stitch all valid entries
         try:
             downloaded = lk.LightCurveCollection([entry.download() for entry in valid_entries])
             print(f"Number of light curves downloaded: {len(downloaded)}")
-            stitched = downloaded.stitch()
-            stitched = stitched.normalize(unit='ppm')
-            print('Stitched and Normalized light curve...')
+            if len(downloaded) == 1:
+                stitched = downloaded[0].normalize(unit='ppm')
+                print("No stitching needed, normalized light curve...")
+            else:
+                stitched = downloaded.stitch().normalize(unit='ppm')
+                print('Stitched and Normalized light curve...')
             
-            pg = lc.flatten().to_periodogram(normalization='amplitude')
+            pg = stitched.flatten().to_periodogram(normalization='amplitude')
             print(f"Converted to periodogram...")
             pg.show_properties()
             
@@ -251,16 +254,20 @@ class TimeDataTESS :
             
             if peaks.shape == (0,): # Filtering out the stars with no features
                 print("No features to analyze...")
-                return None, None, None, None
+                return None, None, None, None, None
             
-            skewed = skew(pg.power, nan_policy='omit')
-            print('Skew value:', skewed)
+            pgskewed = skew(pg.power, nan_policy='omit')
+            print('PG Skew value:', pgskewed)
             
-            return stitched, pg, tic_id, skewed
+            flux = np.array(stitched.flux.to_value())
+            lcskewed = skew(flux, nan_policy='omit')
+            print('LC Skew value:', lcskewed)
+            
+            return stitched, pg, tic_id, pgskewed, lcskewed
 
         except Exception as e:
             print(f"Download failed for TIC {tic_id}: {e}")
-            return None, None, None, None
+            return None, None, None, None, None
         '''else:
             print(f"TIC {tic_id} not found in known data.")
             return None, None'''
@@ -290,15 +297,17 @@ class TimeDataTESS :
                 print(f"Skipping candidate with low probability: {prob}")
                 continue
             
-            lc, pg, tic_id, skewed = self.getShortestCadence(ra, dec)
+            lc, pg, tic_id, pgskewed, lcskewed = self.getShortestCadence(ra, dec)
             
             if lc is None:
                 continue
 
             # I am using Gaia's 'Table' because using extend or append does not work with how the data is formatted
+            '''
+            os.makedir('Data/TESS Data/Light Curves', exist_ok=True)
             tbl = Table([lc.flux, lc.time], names=('Flux', 'Time (BKJD)'))
             tbl.write(f'Data/TESS Data/Light Curves/Light Curve TIC {tic_id}.csv', 
-                      format='ascii.csv', overwrite=True)
+                      format='ascii.csv', overwrite=True)'''
 
             print(f"Downloaded data for TIC {tic_id}")
 
@@ -308,9 +317,11 @@ class TimeDataTESS :
             maxPw = pg.max_power.value
 
             # I am using Gaia's 'Table' because using extend or append does not work with how the data is formatted
+            '''
+            os.makedir('Data/TESS Data/Power Spectrums', exist_ok=True)
             tbl = Table([pg.frequency, pg.power], names=('Frequency', 'Power'))
             tbl.write(f'Data/TESS Data/Power Spectrums/Power Spectrum TIC {id}.csv', 
-                      format='ascii.csv', overwrite=True)
+                      format='ascii.csv', overwrite=True)'''
             
             # Adding data to the stars list
             if (ra in cands['RA_ICRS'].values) and (dec in cands['DE_ICRS'].values):
@@ -320,16 +331,18 @@ class TimeDataTESS :
                     'TargetID': f"TIC {id}",
                     'GaiaDR3': row.GaiaDR3,
                     'Probability': prob,
-                    'RA': ra,
-                    'DEC': dec,
+                    'Solar Mass' : row.Mass50,
+                    'RA (deg)': ra,
+                    'DEC (deg)': dec,
                     'pmRA' : row.pmRA,
                     'pmDEC' : row.pmDE,
-                    'Nyquist Frequency': round(nyquist, 6),
-                    'Max Power': round(maxPw, 6),
-                    'Frequency at max Power': round(maxPwFreq, 4),
+                    'Nyquist Frequency (1/d)': round(nyquist, 6),
+                    'Max Power (ppm)': round(maxPw, 6),
+                    'Frequency at max Power (1/d)': round(maxPwFreq, 4),
                     'GMAG': row.GMAG0,
                     'BP_RP': row.BP_RP0,
-                    'Skew' : skewed
+                    'PG Skew' : pgskewed,
+                    'LC Skew' : lcskewed
                 })
                     
             # Returning the stars data as a pandas dataframe
@@ -361,13 +374,14 @@ class TimeDataTESS :
             
         for i in range(len(stars)):
             # Getting the data from the TESS stars file
-            nyquist = stars['Nyquist Frequency'][i]
+            nyquist = stars['Nyquist Frequency (1/d)'][i]
             id = stars['TargetID'][i]
             gmag = stars['GMAG'][i]
             bp_rp = stars['BP_RP'][i]
             name = stars['Cluster Name'][i]
             prob = stars['Probability'][i]
-            skewed = stars['Skew'][i]
+            pgskewed = stars['PG Skew'][i]
+            lcskewed = stars['LC Skew'][i]
             
             print(f'Plotting {id}...')
             
@@ -383,12 +397,10 @@ class TimeDataTESS :
             
             # Plotting the CMD
             sc = ax1.scatter(bp_rp0, gmag0, c=prob0, cmap='viridis', label=f'{name}', s=10, zorder=1)
-            ax1.scatter(bp_rp, gmag, c=prob, cmap='viridis', label=f'{id}', s=80, zorder=3, marker='*')
+            ax1.scatter(bp_rp, gmag, c=prob, cmap='viridis', s=80, zorder=3, marker='*')
             ax1.plot(BP-RP, G+10, label=f'Isochrone Age: {age:.3f}', c='m', zorder=1) 
-            ax1.plot([], [], ':', label=f'Skew: {skewed:.3f}')
-            #ax1.plot([], [], '.', label=f'log10(age): {age:.2f}')
             fig.colorbar(sc, ax=ax1, label='Probability')
-            ax1.set_title(f'CMD of TESS star with Cluster', fontweight='bold')
+            ax1.set_title(f'CMD with Cluster', fontweight='bold')
             ax1.set_ylabel('Absolute Mag [GMAG]', fontweight='bold')
             ax1.set_xlabel('Color/Temp [Bp-Rp]', fontweight='bold')
             ax1.set_xlim(min(bp_rp0)-0.5, max(bp_rp0)+0.5)
@@ -401,15 +413,17 @@ class TimeDataTESS :
             time = lc.time.value
             xmin, xmax = min(time), (min(time)+10)
             lc.plot(ax=ax3, label='')
+            ax3.plot([], [], ':', label=f'LC Skew: {lcskewed:.3f}')
             ax3.set_xlim(xmin, xmax)
-            ax3.set_title(f'Limited Light Curve of {id}', fontweight='bold')
+            ax3.set_title(f'Limited Light Curve', fontweight='bold')
             ax3.set_ylabel('Flux [e/s]', fontweight='bold')
             ax3.set_xlabel('Time [BKJD]', fontweight='bold')
+            ax3.legend(loc='best')
             ax3.grid(zorder=0)
             
             # Plotting the power spectrum
             pg.plot(ax=ax4, label='')
-            ax4.set_title(f'Power Spectrum of {id}', fontweight='bold')
+            ax4.set_title(f'Power Spectrum', fontweight='bold')
             ax4.set_xlabel('Frequency [1/d]', fontweight='bold')
             ax4.set_ylabel('')
             ax4.grid(zorder=0)
@@ -417,16 +431,18 @@ class TimeDataTESS :
             # Plotting the power spectrum with limited x-axis to zoom in on features
             max_lim = pg.frequency_at_max_power+(40*(1/u.day))
             pg.plot(ax=ax2, label=f'Nyquist: {nyquist}')
-            ax2.set_title(f'Limited Power Spectrum of {id}', fontweight='bold')
+            ax2.plot([], [], ':', label=f'PG Skew: {pgskewed:.3f}')
+            ax2.set_title(f'Limited Power Spectrum', fontweight='bold')
             ax2.set_ylabel('Power [ppm]', fontweight='bold')
             ax2.set_xlabel('')
             ax2.grid(zorder=0)
             ax2.set_xlim(0, max_lim.to_value())
             ax2.legend(loc='best')
             
+            plt.suptitle(f'{id}', fontweight='bold', fontsize=16)
             plt.tight_layout()
             # Save the figure with a specific filename
-            plt.savefig(f"Data/TESS Data/Graphs/CMD, LC, and PWS of {id}", dpi=300, bbox_inches='tight')
+            plt.savefig(f"Data/TESS Data/Graphs/Final Plot of {id}", dpi=300, bbox_inches='tight')
             #plt.show()    
         
 class Main:
@@ -494,22 +510,37 @@ class Main:
         a desnity plot in determining the best candidates.
         """
         results = self.concatenate_results()
-        skewed = results['Skew']
-        power = results['Max Power']
+        pgskewed = results['PG Skew']
+        lcskewed = results['LC Skew']
+        power = results['Max Power (ppm)']
         # Calculate the 2D density
-        xy = np.vstack([skewed, power])  # x and y are the same
-        z = gaussian_kde(xy)(xy)
+        xy = np.vstack([np.concatenate([pgskewed, lcskewed]), 
+                np.concatenate([power, power])])
+        z_all = gaussian_kde(xy)(xy)
+
+        # Then split the z values to assign to each scatter
+        z_pg = z_all[:len(pgskewed)]
+        z_lc = z_all[len(pgskewed):]
         
-        fig, ax = plt.subplots(figsize=(10,6))
-        sc = ax.scatter(skewed, power, c=z, s=20, cmap='viridis', label='Skew', zorder=2)
-    
-        cbar = plt.colorbar(sc, ax=ax, label='Density')
+        fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(10,8))
+        
+        # Get shared vmin/vmax
+        vmin = min(z_all)
+        vmax = max(z_all)
+        
+        sc1 = ax1.scatter(pgskewed, power, c=z_pg, s=20, cmap='viridis', vmin=vmin, vmax=vmax, zorder=2)
+        ax1.set_ylabel('Max Power [ppm]', fontweight='bold')
+        ax1.set_title('Power Skew to Find Higher Pulsations', fontweight='bold')
+        ax1.grid(zorder=0)
+        
+        sc2 = ax2.scatter(lcskewed, power, c=z_lc, s=20, cmap='viridis', vmin=vmin, vmax=vmax, zorder=2)
+        ax2.set_xlabel('Skew value', fontweight='bold')
+        ax2.set_title('Flux Skew to Find Binaries', fontweight='bold')
+        ax2.grid(zorder=0)
+        
+        cbar = fig.colorbar(sc1, ax=[ax1, ax2])
         cbar.set_ticks([])  # Remove the tick marks and numbers
-        plt.xlabel('Skew value')
-        plt.xlabel('Max Power [ppm]')
-        plt.grid(zorder=0)
-        plt.title("Density Plot to Determine 'Best' Candidates")
-        plt.legend(loc='best')
+        fig.suptitle('Power vs. Skew Density', fontweight='bold', fontsize=14, x=0.44, y=0.95)
         plt.savefig(path, dpi=300, bbox_inches='tight')
         #plt.show()
         
@@ -555,7 +586,6 @@ if __name__ == "__main__":
     # from self.pfile or  self.cfile, parquet or csv resp, in the Main class __init__ function
     # If doing so, may need to change RA and DEC, GMAG and BP-RP, and other parameter column names in
     # TimeDataTESS class functions.
-    start_time = time.time()
     '''print('Running the Vizier_Catalog.py file...')
     VC.GetData.main(input=-1) # -1 for all rows during the Vizier query, if testing set to lower number
     print('Finished cross-referencing, finding candidates and getting TESS data to analyze them...')
@@ -565,8 +595,8 @@ if __name__ == "__main__":
     
     # Either set stop=some number, or stop=stop_clust to run through all of the clusters (found from vizierQuery function)
     clusters = pd.read_csv('Data/clusters.csv') 
-    stop_clust = len(clusters) # will take a while, like 2 days, unless you change input value for Vizier query.
+    stop_clust = len(clusters) # will take a while, like 2 days for 'run' function, unless you change input value for Vizier query.
 
     #-------> CURRENTLY USING MEMBERS.CSV <-------
     # Stop variable to the target ID you want to start from, default is 1 and 7167, resp.
-    Main().run(start=1593, stop=stop_clust) # Stopped at ID 1593
+    Main().run(start=117, stop=stop_clust) # Stopped at ID 117
