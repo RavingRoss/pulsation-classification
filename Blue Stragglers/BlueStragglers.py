@@ -599,4 +599,4 @@ if __name__ == "__main__":
 
     #-------> CURRENTLY USING MEMBERS.CSV <-------
     # Stop variable to the target ID you want to start from, default is 1 and 7167, resp.
-    Main().run(start=117, stop=stop_clust) # Stopped at ID 149
+    Main().run(start=2609, stop=stop_clust) # Stopped at ID 2609
