@@ -57,4 +57,4 @@ This project identifies and filters potential BSS candidates from stellar cluste
 
 > CMD with color-mapped membership probability and a highlighted candidate, including its lightcurve and PS:
 
-![Example of Final Plot](https://github.com/RavingRoss/pulsation-classification/blob/main/Blue%20Stragglers/Data/TESS%20Data/Graphs/Final%20Plot%20of%20TIC%20157567602.png)
+![Example of Final Plot](https://github.com/RavingRoss/pulsation-classification/blob/main/Blue%20Stragglers/Data/TESS%20Data/Graphs/High_End/Final%20Plot%20of%20TIC%20157567602.png)
