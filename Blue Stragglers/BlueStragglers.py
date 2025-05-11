@@ -573,7 +573,7 @@ class Main:
 
         # Combine all DataFrames into one
         combined_df = pd.concat(dataframes, ignore_index=True)
-        combined_df = combined_df.sort_values(by='ID')
+        combined_df = combined_df.sort_values(by='PG Skew', ascending=False)
 
         # Save the combined DataFrame to a single CSV file
         combined_df.to_csv(output_file, index=False)

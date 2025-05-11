@@ -1,5 +1,5 @@
 
---> '!' points mean cworking/completed and '?' means need to implement <--
+--> '!' points mean working/completed and '?' means need to implement <--
 
 * Make subplots including CMD highlighting current star and lightcurve with power spectrum !!
 * Do a cross reference with gaia designation and TIC !!
@@ -21,3 +21,8 @@
 * Use scipy.signal.find_peaks to differentiate between bad and good signals. !!
     - measure the scewdness, high skew, a lot of high amp peaks. (scipy.stats.skew) !!
 * Add age parameter !!
+------------------------------------------------------------------------------------------------------------
+* Percentages of total candidates' skewness 
+Low end: 45.556% (log(skew) < 1)
+Mid end: 38.889% (log(skew) > 1, < 1.5)
+High end: 15.556% (log(skew) > 1.5, < 2)
