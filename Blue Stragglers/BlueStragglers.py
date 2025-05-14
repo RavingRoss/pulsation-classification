@@ -529,14 +529,42 @@ class Main:
         vmax = max(z_all)
         
         sc1 = ax1.scatter(pgskewed, power, c=z_pg, s=20, cmap='viridis', vmin=vmin, vmax=vmax, zorder=2)
+        
+        # Add a rectangle to highlight the region
+        # Get full y-axis limits from the axes
+        ymin, ymax = ax1.get_ylim()
+        rect1 = patches.Rectangle((0, ymin), 10 - 0, ymax - ymin,
+                                    linewidth=2, edgecolor='red', facecolor='red', alpha=0.1, zorder=3, label='Low Limit')
+        ax1.add_patch(rect1)
+        
+        rect2 = patches.Rectangle((10, ymin), 31.623 - 10, ymax - ymin,
+                                    linewidth=2, edgecolor='blue', facecolor='blue', alpha=0.05, zorder=3, label='Mid Limit')
+        ax1.add_patch(rect2)
+        
+        rect3 = patches.Rectangle((31.623, ymin), 100 - 31.623, ymax - ymin,
+                                    linewidth=2, edgecolor='magenta', facecolor='magenta', alpha=0.05, zorder=3, label='High Limit')
+        ax1.add_patch(rect3)
+            
         ax1.set_ylabel('Max Power [ppm]', fontweight='bold')
         ax1.set_title('Power Skew to Find Higher Pulsations', fontweight='bold')
         ax1.grid(zorder=0)
+        ax1.legend(loc='best')
         
         sc2 = ax2.scatter(lcskewed, power, c=z_lc, s=20, cmap='viridis', vmin=vmin, vmax=vmax, zorder=2)
+        
+        ymin0, ymax0 = ax2.get_ylim()
+        rect01 = patches.Rectangle((2.2, ymin0), -2 - 2.2, ymax0 - ymin0,
+                                    linewidth=2, edgecolor='red', facecolor='red', alpha=0.1, zorder=3, label='Low Limit')
+        ax2.add_patch(rect01)
+        
+        rect02 = patches.Rectangle((-2, ymin0), -10.2 - 2, ymax0 - ymin0,
+                                    linewidth=2, edgecolor='blue', facecolor='blue', alpha=0.05, zorder=3, label='High Limit')
+        ax2.add_patch(rect02)
+        
         ax2.set_xlabel('Skew value', fontweight='bold')
         ax2.set_title('Flux Skew to Find Binaries', fontweight='bold')
         ax2.grid(zorder=0)
+        ax2.legend(loc='best')
         
         cbar = fig.colorbar(sc1, ax=[ax1, ax2])
         cbar.set_ticks([])  # Remove the tick marks and numbers
@@ -590,8 +618,10 @@ if __name__ == "__main__":
     VC.GetData.main(input=-1) # -1 for all rows during the Vizier query, if testing set to lower number
     print('Finished cross-referencing, finding candidates and getting TESS data to analyze them...')
     '''
+    # This does not cross-reference data, just grabs the members and clusters files, do not need to do it unless you do not have them.
     # Change the rows var to the number of rows you want your input files to be, if testing set to lower number.
-    #GetData().vizierQuery(input=-1)
+    '''print('Running the Vizier_Catalog.py file...')
+    GetData().vizierQuery(input=-1)'''
     
     # Either set stop=some number, or stop=stop_clust to run through all of the clusters (found from vizierQuery function)
     clusters = pd.read_csv('Data/clusters.csv') 
