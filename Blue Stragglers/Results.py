@@ -76,7 +76,8 @@ filtered = all[all['Solar Mass'] > 2.5].reset_index(drop=True)
 best = best[best['Solar Mass'] > 2.5].reset_index(drop=True)
 middle = middle[middle['Solar Mass'] > 2.5].reset_index(drop=True)
 
-print(f'Candidates > 3 Solar Masses: {len(filtered)/len(cands)*100:.3f}%')
+print(f'High/Mid-Tier Skew: {len(all)/len(cands)*100:.3f}%')
+print(f'Candidates > 3 Solar Masses: {len(filtered)/len(all)*100:.3f}%')
 filtered.to_csv('Data/TESS Data/Massive_Candidates.csv', index=False)
 
 best_freq = best['Frequency at max Power (1/d)']
@@ -101,6 +102,8 @@ ax.set_title(r'BSS Candidates Above $2.5M_{\odot}$', fontsize=18)
 ax.grid(True, zorder=0) 
 ax.legend(loc='best')
 plt.savefig('Data/TESS Data/Mass vs Freq')
-plt.show()
+#plt.show()
 
-#best_cands = pd.read_csv('Data/TESS Data/Graphs/Best/Best_Candidates.csv') 
+best_cands = pd.read_csv('Data/TESS Data/Graphs/Best/Best_Candidates.csv') 
+
+print(f"Best out of 180: {len(best_cands)/len(cands)*100:.3f}%")
