@@ -1,5 +1,5 @@
-# Pulsation Classification
-Includes my findings and past/current research on pulsators which include roAps, Blue Stragglers, delta scuti, gamma dors, and maybe more in the future!
+# Pulsation Classification Repository 
+Includes my findings and past/current research on pulsators which include Blue Stragglers and roAps and will eventually include delta scuti, gamma dors, and more in the future!
 
 ---
 
@@ -58,3 +58,37 @@ This project identifies and filters potential BSS candidates from stellar cluste
 > CMD with color-mapped membership probability and a highlighted candidate, including its lightcurve and PS:
 
 ![Example of Final Plot](https://github.com/RavingRoss/pulsation-classification/blob/main/Blue%20Stragglers/Data/TESS%20Data/Graphs/High_End/Final%20Plot%20of%20TIC%20157567602.png)
+
+---
+
+# 2. roAp Candidates
+
+This project is focused on building up on the current catalogs of roAp stars. Starting off with running tests on known roAps, and eventually searching for new candidates using TESS. 
+
+---
+
+## File Structure
+
+- roAp/
+  - main roAp.py file (not up-to-date)
+  - test.py file for creating test plots
+  - TIC test plots
+
+--- 
+
+## Features
+
+- Selects stars only with high frequency's.
+- Runs selected stars through extra checks:
+  - Skew check will classify high/low priority.
+  - Manually check test plots.
+- Will organize priority once script is stopped.
+- Exports data using .parquet files to minimize storage.
+
+---
+
+## Example Plot 
+
+> Includes: lower-end PSD, normalized LC, high-end PSD, and normalized phase-folded LC.
+
+![Example of Test Plot](https://github.com/RavingRoss/pulsation-classification/blob/46f3d8bbd85ed0f864dffd0dd3100ded25569515/roAp/TIC%20310817678.png)
