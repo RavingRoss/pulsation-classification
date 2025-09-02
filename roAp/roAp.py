@@ -13,6 +13,7 @@ TESS roAp Classification Alg|
 -> UPDATES <-
 - Copied BlueStragglers.py and editing to search for roAp stars using TESS 2-min cadence data 
 with authors QLP and SPOC. 
+- Currently trying to automate finding the peaks in each periodogram using Test.py script.
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 # Importing packages as needed
