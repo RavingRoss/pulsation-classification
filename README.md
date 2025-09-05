@@ -9,6 +9,12 @@ I would like to acknowledge the team who developed the lightkurve package, as th
 
 ---
 
+# Dependencies
+
+Easiest way to install the packages is in a virtual environment, which can be made the following way, ```python -m venv .venv```. Then activate the environment, ```source .venv/bin/activate```; it can be deactivated by typing ```deactivate```. The necessary packages can be found in the ```requirements.txt``` file; to install these, run ```pip install -r requirements.txt``` inside the environment. If you would like to generate this file as well, you can do this by running ```pip freeze > requirements.txt``` in the environment. 
+
+The repository uses 'pre-commit' and 'black' for organization and double checking the commit. After editing the code and wanting to commit your changes, 'pre-commit' will run the checks then fail, as it organized the code accordingly. To commit, simply re-add the changes, ``` git add .```, then commit again, ``` git commit -m "message here"```, then push the chagnes, ```git push```. If there is a commit error, the message will show and need to be fixed before committing and pushing the changes. 
+
 # 1. Blue Straggler Candidates
 
 This project identifies and filters potential BSS candidates from stellar cluster data using color-magnitude diagrams (CMDs) and their Power Spectrums (PS). It uses membership probabilities and photometric criteria to select candidates, visualize them, using the lightkurve package, and save the results. 
