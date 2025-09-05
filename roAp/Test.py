@@ -9,9 +9,11 @@ import numpy as np
 author = "TESS-SPOC"
 sectors = 57,56,60,58,59"""
 
-# tic_id = 'TIC 165052884' # WEIRD
+# tic_id = 'TIC 165052884' # Terrible data
+# author = "TESS-SPOC"
 
 # tic_id = 'TIC 101624823' # NONE at 200s
+# author = "TESS-SPOC"
 
 '''tic_id = 'TIC 259017938'
 author = "TESS-SPOC"'''
@@ -20,18 +22,18 @@ author = "TESS-SPOC"'''
 author = "TESS-SPOC"
 sectors = 73#60"""
 
-'''tic_id = 'TIC 445493624' # Lots of noise
-author="TESS-SPOC"'''
+# tic_id = 'TIC 445493624' # Lots of noise
+# author="TESS-SPOC"
 
-"""tic_id = 'TIC 467074220' # Lots of noise
-author="TESS-SPOC"
-sectors = 73#, 59"""
+# tic_id = 'TIC 467074220' # WEIRD, DIAGNOSE THIS
+# author="TESS-SPOC"
+# sectors = 73#59
 
-tic_id = "TIC 310817678"  # GOOD, fig 8
+# tic_id = "TIC 310817678"  # GOOD, fig 8
+# author = "TESS-SPOC"
+
+tic_id = "TIC 387115314"  # GOOD, fig 11
 author = "TESS-SPOC"
-
-'''tic_id = 'TIC 387115314' # GOOD, fig 11
-author = "TESS-SPOC"'''
 
 lc = lk.search_lightcurve(tic_id, exptime=200, author=author)  # , sector=sectors)
 print(lc)
@@ -53,12 +55,11 @@ time = stitch.time.value
 pg = stitch.flatten().to_periodogram(normalization="amplitude")
 pg.show_properties()
 
-pg_low = stitch.to_periodogram(normalization="amplitude", maximum_frequency=10.0)
+pg_low = stitch.to_periodogram(normalization="amplitude", maximum_frequency=5.0)
 
 # To find the frequency of max peak, want to do for lower frequency spectrum to get rotation period
-pmax = pg_low.frequency.value[np.argmax(pg_low.power.value)]
-rot_period = 2 / pmax
-print(f"Rotation Period: {1/pmax} days")
+fmax = pg_low.frequency_at_max_power.to_value()
+rot_period = 2 / fmax
 
 # Threshold to find peaks
 mmag_lps = (
@@ -202,13 +203,16 @@ bin_size_days = desired_phase_bin * rot_period
 binned = folded_lc.bin(time_bin_size=bin_size_days)
 
 # Convert relative flux to mmag
-mmag_fpd = -2.5 * np.log10(folded_lc.flux / np.mean(folded_lc.flux)) * 1000
-ax4.scatter(folded_lc.phase.value, mmag_fpd, s=1, color="k")
+mmag_fpd = -2.5 * np.log10(binned.flux / np.mean(binned.flux)) * 1000
+phase = (binned.time.value % rot_period) / rot_period  # Phase from 0 to 1
+# mmag_fpd = -2.5 * np.log10(folded_lc.flux / np.mean(folded_lc.flux)) * 1000
+# phase = (folded_lc.time.value%rot_period) / rot_period  # Phase from 0 to 1
+ax4.scatter(phase, mmag_fpd, s=1, color="k")
 ax4.set_xlabel("Phase")
 ax4.set_ylabel("Δ Magnitude (mmag)")
 # folded_lc.plot(ax=ax4, color='black', zorder=2)
 ax4.set_title(
-    f"Phase-folded Light Curve (Period = {(1/pmax):.3f} d)", fontweight="bold"
+    f"Phase-folded Light Curve (Period = {(rot_period):.3f} d)", fontweight="bold"
 )
 ax4.invert_yaxis()  # Invert y-axis for magnitude
 
