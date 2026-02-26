@@ -284,3 +284,4 @@ if __name__ == "__main__":
     fr = find_roAp(flux, time)
 
     fr.plot_lightcurve()
+    print("Finished compiling")
