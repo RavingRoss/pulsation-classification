@@ -11,10 +11,13 @@ TESS Cycle 2 Obs with 2-min Cadence |
       _)_/LI
 
 -> UPDATES <-
-- Copied most of Test.py since the plotting tools are very good for that. But need
+✔️ Copied most of Test.py since the plotting tools are very good for that. But need
 edit so that input data is 'time' and 'flux' (Data from sarek1).
-- Using the automation tool from Test.py to find peaks in each periodogram.
-    ~ I think it works, still testing.
+✔️ Using the automation tool from Test.py to find peaks in each periodogram.
+    + NOT stitching the LCs as they look weird, so only using one LC download instead of all (if more than one were found).
+    + Need to come up with a way to find the best possible LC-set if there are > 1 LCs when searching.
+    + Or maybe since we are given flux and time, when using "LightCurve()" it only returns a single LC-set.
+- Everything is working, now need to add classification system for low, mid, and high end candidates.
 """
 
 import lightkurve as lk
@@ -45,37 +48,18 @@ try:
         print(f"No light curves found for {tic_id}.")
         exit()
     else:
-        # stitch = lc.download()
-        stitch = lc.download_all().stitch()
+        stitch = lc.download()
+        # stitch = lc.download_all().stitch()
         clean_stitch = stitch.remove_nans()
-        print(f"Stitched light curve for {tic_id} with {len(stitch)} data points.")
+        print(
+            f"Stitched light curve for {tic_id} with {len(clean_stitch)} data points."
+        )
 except Exception as e:
     print(f"Error downloading or stitching light curves for {tic_id}: {e}")
     exit()
 
-
+# When I get the dataset from Dan this will be replaced with the file input.
 time, flux = clean_stitch.time.value, clean_stitch.flux.value
-
-pg = clean_stitch.flatten().to_periodogram(normalization="amplitude")
-pg.show_properties()
-
-pg_low = clean_stitch.to_periodogram(normalization="amplitude", maximum_frequency=5.0)
-
-# To find the frequency of max peak, want to do for lower frequency spectrum to get rotation period
-fmax = pg_low.frequency_at_max_power.to_value()
-rot_period = 2 / fmax
-
-# Threshold to find peaks
-mmag_lps = (
-    0.0010857362047581294 * 1e6 * pg_low.power.value
-)  # Convert to mmag for lower frequency Periodogram
-mmag_ps = (
-    0.0010857362047581294 * 1e6 * pg.power.value
-)  # Convert to mmag for main Periodogram
-
-# Define conversion functions
-factor_mHz = 1 / 86400 * 1000  # cycles/day → mHz
-
 
 # --------------------------------------------------------------------------------------------------------------
 # Where the fun begins:
@@ -87,6 +71,8 @@ class find_roAp:
     outputs the Flux and Time of stars. With this we search through the database to find
     roAp candidates.
     - Functions:
+        - __init__(self, flux, time): Initializes the class with the flux and time data to
+                                      get the LightCurve.
         - cpd_to_mhz(self): Converts cycles/day to mHz.
         - mhz_to_cpd(self): Converts mHz to cycles/day.
         - find_peaks(self): Finds peaks in the power spectrum.
@@ -97,10 +83,44 @@ class find_roAp:
 
     def __init__(self, flux, time):
         """
-        Initializes the class with the flux and time data.
+        Initializes the class with the flux and time data to get the LightCurve.
+
+        Also gives the rotation period, conversions to mmags, and the conversion
+        factor for cycles/day to mHz.
         """
         self.flux = flux
         self.time = time
+        self.light_curve = lk.LightCurve(time=time, flux=flux)  # type: ignore
+
+        try:
+            if len(self.light_curve) == 0:
+                raise ValueError("Light curve is empty")
+
+            self.pg = self.light_curve.flatten().to_periodogram(
+                normalization="amplitude"
+            )
+            self.pg.show_properties()
+
+            self.pg_low = self.light_curve.to_periodogram(
+                normalization="amplitude", maximum_frequency=5.0
+            )
+
+            # To find the frequency of max peak, want to do for lower frequency spectrum to get rotation period
+            fmax = self.pg_low.frequency_at_max_power.to_value()
+            self.rot_period = 2 / fmax
+
+            # Threshold to find peaks
+            self.mmag_lps = (
+                0.0010857362047581294 * 1e6 * self.pg_low.power.value
+            )  # Convert to mmag for lower frequency Periodogram
+            self.mmag_ps = (
+                0.0010857362047581294 * 1e6 * self.pg.power.value
+            )  # Convert to mmag for main Periodogram
+
+            # Define conversion functions
+            self.factor_mHz = 1 / 86400 * 1000  # cycles/day → mHz
+        except ValueError as e:
+            print(e)
 
     def cpd_to_mhz(self, x):
         """
@@ -108,7 +128,7 @@ class find_roAp:
         - Returns:
             - mHz (float): Frequency in mHz.
         """
-        return x * factor_mHz
+        return x * self.factor_mHz
 
     def mhz_to_cpd(self, x):
         """
@@ -116,7 +136,7 @@ class find_roAp:
         - Returns:
             - cpd (float): Frequency in cycles/day.
         """
-        return x / factor_mHz
+        return x / self.factor_mHz
 
     def find_peaks(self):
         """
@@ -129,25 +149,25 @@ class find_roAp:
             - spacing (list): List of spacings between consecutive peaks.
         """
         freq = []
-        mean_power = np.nanmean(mmag_ps)
-        max_power = np.nanmax(mmag_ps)
+        mean_power = np.nanmean(self.mmag_ps)
+        max_power = np.nanmax(self.mmag_ps)
         num = 5
         threshold = num * mean_power
         print(
             f"Max Power: {max_power} mmag | Mean Power: {mean_power} mmag | Threshold set to: {threshold} mmag"
         )
 
-        indices, properties = find_peaks(mmag_ps, height=float(threshold))
+        indices, properties = find_peaks(self.mmag_ps, height=float(threshold))
         peaks = properties["peak_heights"]
 
         # Get the frequencies of the peaks
-        peak_freqs = pg.frequency[indices].to_value()
+        peak_freqs = self.pg.frequency[indices].to_value()
 
         # Calculate the spacing between consecutive peaks
         spacing = np.diff(peak_freqs)
 
         for p in indices:
-            f = pg.frequency[p].to_value()
+            f = self.pg.frequency[p].to_value()
             freq.append(f)
 
         return num, threshold, freq, peaks, spacing
@@ -158,7 +178,7 @@ class find_roAp:
         - Returns:
             - skew (float): Skewness of the power spectrum.
         """
-        return skew(mmag_ps, nan_policy="omit")
+        return skew(self.mmag_ps, nan_policy="omit")
 
     def plot_lightcurve(self):
         """
@@ -171,9 +191,9 @@ class find_roAp:
         ax1, ax2, ax3, ax4 = axs.flatten()
 
         # Lower frequency periodogram
-        ax1.plot(pg_low.frequency.value, mmag_lps, color="k", linewidth=1.0)
-        ax1.set_xlim(0, max(pg_low.frequency.value) / 2)
-        ax1.set_ylim(0, max(mmag_lps) * 1.05)
+        ax1.plot(self.pg_low.frequency.value, self.mmag_lps, color="k", linewidth=1.0)
+        ax1.set_xlim(0, max(self.pg_low.frequency.value) / 2)
+        ax1.set_ylim(0, max(self.mmag_lps) * 1.05)
 
         # Add secondary x-axis for mHz
         secax = ax1.secondary_xaxis("top", functions=(self.cpd_to_mhz, self.mhz_to_cpd))
@@ -186,7 +206,7 @@ class find_roAp:
         ax1.set_title("Low-Frequency Periodogram", fontweight="bold")
 
         # Plotting the main periodogram with peaks and threshold
-        ax3.plot(pg.frequency.value, mmag_ps, color="k", linewidth=1.0)
+        ax3.plot(self.pg.frequency.value, self.mmag_ps, color="k", linewidth=1.0)
 
         ymax = ax3.get_ylim()[1]  # Get current y-axis maximum
 
@@ -195,7 +215,7 @@ class find_roAp:
 
         # Find the index of the central peak (highest peak)
         for i, (f, h) in enumerate(zip(freq, peaks)):
-            if h == max(mmag_ps):  # Central peak or very far from peak
+            if h == max(self.mmag_ps):  # Central peak or very far from peak
                 ax3.vlines(
                     x=f,
                     ymin=h,
@@ -240,7 +260,7 @@ class find_roAp:
         ax3.legend()
         ax3.set_title(f"Periodogram (Skew = {skew:.3f})", fontweight="bold")
 
-        lc = clean_stitch.normalize()
+        lc = self.light_curve.normalize()
 
         # Light Curve plot
         mmag_lc = -2.5 * np.log10(lc.flux / np.mean(lc.flux)) * 1000
@@ -252,22 +272,24 @@ class find_roAp:
 
         # Bin the folded light curve to reduce scatter
         # Bin: specify bin size in *days*, so convert desired phase bin width to time
-        folded_lc = lc.fold(period=rot_period)
+        folded_lc = lc.fold(period=self.rot_period)
         desired_phase_bin = 0.0005  # 1% of the phase
-        bin_size_days = desired_phase_bin * rot_period
+        bin_size_days = desired_phase_bin * self.rot_period
 
         binned = folded_lc.bin(time_bin_size=bin_size_days)
 
         # Convert relative flux to mmag
         mmag_fpd = -2.5 * np.log10(binned.flux / np.mean(binned.flux)) * 1000
-        phase = (binned.time.value % rot_period) / rot_period  # Phase from 0 to 1
+        phase = (
+            binned.time.value % self.rot_period
+        ) / self.rot_period  # Phase from 0 to 1
         # mmag_fpd = -2.5 * np.log10(folded_lc.flux / np.mean(folded_lc.flux)) * 1000
         # phase = (folded_lc.time.value%rot_period) / rot_period  # Phase from 0 to 1
         ax4.scatter(phase, mmag_fpd, s=1, color="k")
         ax4.set_xlabel("Phase")
         ax4.set_ylabel("Δ Magnitude (mmag)")
         ax4.set_title(
-            f"Phase-folded Light Curve (Period = {(rot_period):.3f} d)",
+            f"Phase-folded Light Curve (Period = {(self.rot_period):.3f} d)",
             fontweight="bold",
         )
         ax4.invert_yaxis()  # Invert y-axis for magnitude

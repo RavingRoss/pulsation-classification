@@ -1,9 +1,9 @@
-from scipy.signal import find_peaks
+import lightkurve as lk
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from scipy.stats import skew
-import lightkurve as lk
 import numpy as np
+from scipy.signal import find_peaks
+from scipy.stats import skew
 
 """tic_id = 'TIC 233200244'
 author = "TESS-SPOC"
@@ -33,9 +33,11 @@ sectors = 73#60"""
 # author = "TESS-SPOC"
 
 tic_id = "TIC 387115314"  # GOOD, fig 11
-author = "TESS-SPOC"
+# author = "TESS-SPOC"
 
-lc = lk.search_lightcurve(tic_id, exptime=200, author=author)  # , sector=sectors)
+lc = lk.search_lightcurve(
+    tic_id, cadence="short"
+)  # , exptime=200, author=author)  # , sector=sectors)
 print(lc)
 
 try:
@@ -43,8 +45,8 @@ try:
         print(f"No light curves found for {tic_id}.")
         exit()
     else:
-        # stitch = lc.download()
-        stitch = lc.download_all().stitch()
+        stitch = lc.download()
+        # stitch = lc.download_all().stitch()
         print(f"Stitched light curve for {tic_id} with {len(stitch)} data points.")
 except Exception as e:
     print(f"Error downloading or stitching light curves for {tic_id}: {e}")

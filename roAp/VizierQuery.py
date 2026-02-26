@@ -10,7 +10,7 @@ Querying using Vizier Catalog   |
        |  /T                             Hate leads to suffering." - Yoda, the wise coder
       _)_/LI
 
--> Outputs the queried catalog as a csv and parquet file of member stars in given clusters.
+-> Outputs the queried 'members' catalog from J/A+A/686/A42 as a csv and parquet file.
 """ """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" """""" ""
 import time
 from astroquery.vizier import Vizier
@@ -46,7 +46,7 @@ def vizierQuery(
         catalog = V.find_catalogs(cat)
         V.ROW_LIMIT = input  # or a large number
         print("Getting catalogs...")
-        catalogs = V.get_catalogs(catalog.keys())
+        catalogs = V.get_catalogs(catalog.keys())  # type: ignore
         print("Finished, converting and saving as csv and parquet files...")
         members = catalogs[1]
         members = members.to_pandas()
@@ -58,7 +58,7 @@ def vizierQuery(
 
     end = time.time()
     elapsed = (end - start_time) / 60
-    print(f"Query completed in {elapsed:.2f} minutes, found {len(members)} stars...")
+    print(f"Query completed in {elapsed:.2f} minutes, found {len(members)} stars...")  # type: ignore
 
 
 if "__main__" == __name__:
