@@ -20,46 +20,15 @@ edit so that input data is 'time' and 'flux' (Data from sarek1).
 - Everything is working, now need to add classification system for low, mid, and high end candidates.
 """
 
-import lightkurve as lk
+import os
 
-# import matplotlib
-# matplotlib.use("Agg")
+import lightkurve as lk
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-
-# import matplotlib.ticker as ticker
 import numpy as np
+import pandas as pd
 from scipy.signal import find_peaks
 from scipy.stats import skew
-
-# --------------------------------------------------------------------------------------------------------------
-
-
-tic_id = "TIC 387115314"  # GOOD, fig 11
-author = "TESS-SPOC"
-
-lc = lk.search_lightcurve(
-    tic_id, cadence="short"
-)  # , author="TESS-SPOC", sector=sectors)
-print(lc)
-
-try:
-    if lc is None or len(lc) == 0:
-        print(f"No light curves found for {tic_id}.")
-        exit()
-    else:
-        stitch = lc.download()
-        # stitch = lc.download_all().stitch()
-        clean_stitch = stitch.remove_nans()
-        print(
-            f"Stitched light curve for {tic_id} with {len(clean_stitch)} data points."
-        )
-except Exception as e:
-    print(f"Error downloading or stitching light curves for {tic_id}: {e}")
-    exit()
-
-# When I get the dataset from Dan this will be replaced with the file input.
-time, flux = clean_stitch.time.value, clean_stitch.flux.value
 
 # --------------------------------------------------------------------------------------------------------------
 # Where the fun begins:
@@ -180,13 +149,39 @@ class find_roAp:
         """
         return skew(self.mmag_ps, nan_policy="omit")
 
-    def plot_lightcurve(self):
+    def classify_candidates(self):
+        """
+        Classifies the candidates based on their skewness.
+        - Returns:
+            - classification (str): Classification of the candidates.
+        """
+
+        if not os.path.exists("Data/Candidates"):
+            os.makedirs("Data/Candidates")
+
+        if (
+            self.calculate_skewness() >= 5
+        ):  # Flag for human inspection (found from https://arxiv.org/pdf/2312.04199)
+            if not os.path.exists("Data/Candidates/Tier_1"):
+                os.makedirs("Data/Candidates/Tier_1")
+            return "Tier I"
+        elif (self.calculate_skewness() > 0) & (self.calculate_skewness() < 5):
+            if not os.path.exists("Data/Candidates/Tier_2"):
+                os.makedirs("Data/Candidates/Tier_2")
+            return "Tier II"
+        else:
+            if not os.path.exists("Data/Candidates/Tier_3"):
+                os.makedirs("Data/Candidates/Tier_3")
+            return "Tier III"
+
+    def plot_lightcurve(self, tic_id):
         """
         Plots the high and low power spectra with the Normalized
         and phase-folded light curves.
         - Returns:
-            - 4 plots
+            - 4 sub-plots
         """
+
         fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(15, 8))
         ax1, ax2, ax3, ax4 = axs.flatten()
 
@@ -257,8 +252,10 @@ class find_roAp:
         secax.set_xlabel("Frequency (mHz)")
         secax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=6))
 
-        ax3.legend()
-        ax3.set_title(f"Periodogram (Skew = {skew:.3f})", fontweight="bold")
+        ax3.plot([], [], color="none", label=f"Skew = {skew:.3f} mmag")
+
+        ax3.legend(loc="best")
+        ax3.set_title("High Frequency Periodogram", fontweight="bold")
 
         lc = self.light_curve.normalize()
 
@@ -286,23 +283,67 @@ class find_roAp:
         # mmag_fpd = -2.5 * np.log10(folded_lc.flux / np.mean(folded_lc.flux)) * 1000
         # phase = (folded_lc.time.value%rot_period) / rot_period  # Phase from 0 to 1
         ax4.scatter(phase, mmag_fpd, s=1, color="k")
+        ax4.plot([], [], color="none", label=f"Rot Period: {self.rot_period:.3f} d")
         ax4.set_xlabel("Phase")
         ax4.set_ylabel("Δ Magnitude (mmag)")
         ax4.set_title(
-            f"Phase-folded Light Curve (Period = {(self.rot_period):.3f} d)",
+            "Phase-folded Light Curve",
             fontweight="bold",
         )
         ax4.invert_yaxis()  # Invert y-axis for magnitude
+        ax4.legend(loc="best")  # loc="center right", bbox_to_anchor=(1, 0.93)
 
         plt.suptitle(f"Analysis of {tic_id}", fontweight="bold")
         plt.tight_layout()
-        # plt.show()
-        plt.savefig(f"analysis_{tic_id}.png", dpi=300)
 
-        print(f"Peak Spacing: {spacing}")
+        if self.classify_candidates() == "Tier I":
+            plt.savefig(f"Data/Candidates/Tier_1/analysis_{tic_id}.png", dpi=300)
+            print(f"Saved {tic_id} as Tier I")
+        elif self.classify_candidates() == "Tier II":
+            plt.savefig(f"Data/Candidates/Tier_2/analysis_{tic_id}.png", dpi=300)
+            print(f"Saved {tic_id} as Tier II")
+        else:
+            plt.savefig(f"Data/Candidates/Tier_3/analysis_{tic_id}.png", dpi=300)
+            print(f"Saved {tic_id} as Tier III")
+
+        # print(f"Peak Spacing: {spacing}")
 
 
 if __name__ == "__main__":
-    fr = find_roAp(flux, time)
+    tic_list = [
+        "TIC 387115314",
+        "TIC 310817678",
+        "TIC 467074220",
+        "TIC 134631231",
+    ]
 
-    fr.plot_lightcurve()
+    # tic_id = "TIC 387115314"
+    # author = "TESS-SPOC"
+    for id in tic_list:
+        lc = lk.search_lightcurve(
+            id, cadence="short"
+        )  # , author="TESS-SPOC", sector=sectors)
+        print(lc)
+
+        try:
+            if lc is None or len(lc) == 0:
+                print(f"No light curves found for {id}.")
+                exit()
+            else:
+                stitch = lc.download()
+                # stitch = lc.download_all().stitch()
+                clean_stitch = stitch.remove_nans()  # type: ignore
+                print(
+                    f"Stitched light curve for {id} with {len(clean_stitch)} data points."
+                )
+        except Exception as e:
+            print(f"Error downloading or stitching light curves for {id}: {e}")
+            exit()
+
+        # When I get the dataset from Dan this will be replaced with the file input.
+        time, flux = clean_stitch.time.value, clean_stitch.flux.value
+        fr = find_roAp(flux, time)
+
+        fr.plot_lightcurve(id)
+
+    # print(fr.classify_candidates())
